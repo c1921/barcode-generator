@@ -15,6 +15,72 @@ import { downloadDir, join } from '@tauri-apps/api/path'
 /** 是否运行在 Tauri 桌面环境中 */
 const isTauri = '__TAURI_INTERNALS__' in globalThis
 
+/** ===== 按条码格式分别持久化样式设置 ===== */
+
+/** localStorage 持久化键 */
+const OPTIONS_STORAGE_KEY = 'barcode-options-by-format'
+
+/** 需要按格式持久化的样式字段（不含 format 本身） */
+const STYLE_KEYS: (keyof BarcodeOptions)[] = [
+  'width',
+  'height',
+  'displayValue',
+  'text',
+  'font',
+  'fontSize',
+  'fontOptions',
+  'textAlign',
+  'textPosition',
+  'textMargin',
+  'margin',
+  'background',
+  'lineColor',
+  'flat',
+]
+
+/** 以 format 为键的样式存储结构 */
+type OptionsStore = Record<string, Partial<BarcodeOptions>>
+
+/** 从 localStorage 读取全部格式的样式存储 */
+function loadOptionsStore(): OptionsStore {
+  try {
+    const raw = localStorage.getItem(OPTIONS_STORAGE_KEY)
+    if (!raw) return {}
+    const parsed = JSON.parse(raw)
+    return parsed && typeof parsed === 'object' ? (parsed as OptionsStore) : {}
+  } catch {
+    return {}
+  }
+}
+
+/** 将全部格式的样式存储写入 localStorage */
+function saveOptionsStore(store: OptionsStore) {
+  try {
+    localStorage.setItem(OPTIONS_STORAGE_KEY, JSON.stringify(store))
+  } catch {
+    /* 存储不可用时静默忽略 */
+  }
+}
+
+/** 保存某格式当前的样式字段到存储 */
+function persistStyle(store: OptionsStore, format: string, options: BarcodeOptions) {
+  const style: Partial<BarcodeOptions> = {}
+  for (const key of STYLE_KEYS) {
+    ;(style as Record<string, unknown>)[key] = options[key]
+  }
+  store[format.toUpperCase()] = style
+  saveOptionsStore(store)
+}
+
+/** 加载某格式的样式字段，不存在则用默认值 */
+function loadStyle(
+  store: OptionsStore,
+  format: string,
+): Partial<BarcodeOptions> {
+  const saved = store[format.toUpperCase()]
+  return saved ?? {}
+}
+
 /** 浏览器环境下的兜底下载：将 Blob 保存为文件 */
 function downloadBlobInBrowser(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob)
@@ -69,7 +135,14 @@ function filtersFor(imageFormat: ImageFormat) {
 
 export function useBarcode() {
   const input = ref('')
-  const options = ref<BarcodeOptions>({ ...defaultBarcodeOptions })
+  // 持久化存储：每个条码格式单独保存样式设置
+  const optionsStore = loadOptionsStore()
+  const initialFormat = defaultBarcodeOptions.format
+  const options = ref<BarcodeOptions>({
+    ...defaultBarcodeOptions,
+    ...loadStyle(optionsStore, initialFormat),
+    format: initialFormat,
+  })
   const output = ref<string[]>([])
   const error = ref<string | null>(null)
 
@@ -144,14 +217,31 @@ export function useBarcode() {
   watch([input, options], generate, { deep: true, immediate: true })
 
   function setFormat(format: string) {
-    options.value.format = format.toUpperCase()
+    updateOption('format', format.toUpperCase())
   }
 
   function updateOption<K extends keyof BarcodeOptions>(
     key: K,
     value: BarcodeOptions[K],
   ) {
+    if (key === 'format') {
+      // 切换格式：先保存当前格式的样式，再切换并载入目标格式的样式
+      const oldFormat = options.value.format
+      persistStyle(optionsStore, oldFormat, options.value)
+
+      const newFormat = (value as string).toUpperCase()
+      const saved = loadStyle(optionsStore, newFormat)
+      options.value = {
+        ...defaultBarcodeOptions,
+        ...saved,
+        format: newFormat,
+      }
+      return
+    }
+
     options.value[key] = value
+    // 非格式字段的修改即时持久化到当前格式槽位
+    persistStyle(optionsStore, options.value.format, options.value)
   }
 
   /**
