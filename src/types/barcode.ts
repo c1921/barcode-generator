@@ -76,3 +76,14 @@ export const textPositionOptions = [
   { label: '底部', value: 'bottom' as const },
   { label: '顶部', value: 'top' as const },
 ]
+
+/** 导出图片格式 */
+export type ImageFormat = 'png' | 'jpg' | 'gif' | 'svg'
+
+/** 导出图片格式选项 */
+export const imageFormatOptions: { label: string; value: ImageFormat }[] = [
+  { label: 'PNG', value: 'png' },
+  { label: 'JPG', value: 'jpg' },
+  { label: 'GIF', value: 'gif' },
+  { label: 'SVG', value: 'svg' },
+]

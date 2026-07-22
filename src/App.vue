@@ -3,10 +3,11 @@ import { computed } from 'vue'
 import BarcodeInput from './components/BarcodeInput.vue'
 import BarcodeOptions from './components/BarcodeOptions.vue'
 import BarcodeOutput from './components/BarcodeOutput.vue'
+import ExportBarcode from './components/ExportBarcode.vue'
 import { useBarcode } from './composables/useBarcode'
 import { barcodeTypes } from './config/barcodeTypes'
 
-const { input, options, output, error, updateOption } = useBarcode()
+const { input, options, output, error, updateOption, downloadAll } = useBarcode()
 
 /** 当前格式的示例数据 */
 const currentInitData = computed(() => {
@@ -66,6 +67,13 @@ function fillSampleData() {
               :output="output"
               :error="error"
             />
+            <div class="border-t border-gray-100 px-4 py-3 dark:border-gray-700">
+              <ExportBarcode
+                :disabled="output.length === 0"
+                :count="output.length"
+                @download-all="(fmt) => downloadAll(fmt)"
+              />
+            </div>
           </div>
         </div>
       </div>
